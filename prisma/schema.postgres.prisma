@@ -1,0 +1,425 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Organization {
+  id                     String                  @id @default(cuid())
+  name                   String
+  description            String                  @default("")
+  website                String                  @default("")
+  status                 String                  @default("ACTIVE")
+  subscriptionTier       String                  @default("FREE")
+  subscriptionStatus     String                  @default("ACTIVE")
+  subscriptionInterval   String                  @default("MONTHLY")
+  credits                Int                     @default(2000)
+  monthFreeCreditUsed    Int                     @default(0)
+  availableSeats         Int                     @default(19)
+  totalSeats             Int                     @default(20)
+  apiKey                 String?
+  meta                   String                  @default("{}")
+  createdAt              DateTime                @default(now())
+  updatedAt              DateTime                @updatedAt
+  users                  User[]
+  invitations            AccountInvitation[]
+  projects               Project[]
+  documents              Document[]
+  chatSessions           ChatSession[]
+  knowledgeBases         KnowledgeBase[]
+  templateDocuments      TemplateDocument[]
+  creditLedgerEntries    CreditLedgerEntry[]
+  integrationConnections IntegrationConnection[]
+}
+
+model User {
+  id                   String               @id @default(cuid())
+  name                 String?
+  firstname            String               @default("")
+  lastname             String               @default("")
+  username             String               @default("")
+  email                String               @unique
+  emailVerified        DateTime?
+  image                String?
+  passwordHash         String?
+  role                 String               @default("MEMBER")
+  specialty            String               @default("Product Manager")
+  department           String               @default("Product & Engineering")
+  velocity             Int                  @default(10)
+  status               String               @default("ACTIVE")
+  referralCode         String               @unique @default(cuid())
+  organizationId       String?
+  meta                 String               @default("{}")
+  createdAt            DateTime             @default(now())
+  updatedAt            DateTime             @updatedAt
+  organization         Organization?        @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  accounts             Account[]
+  sessions             Session[]
+  passwordCredential   PasswordCredential?
+  sentInvitations      AccountInvitation[]  @relation("InvitationSender")
+  acceptedInvitation   AccountInvitation?   @relation("InvitationRecipient")
+  auditLogs            AuditLog[]           @relation("AuditActor")
+  createdProjects      Project[]            @relation("ProjectCreator")
+  ownedProjects        Project[]            @relation("ProjectOwner")
+  createdIssues        Issue[]              @relation("IssueCreator")
+  ownedIssues          Issue[]              @relation("IssueOwner")
+  createdDocuments     Document[]           @relation("DocumentCreator")
+  documentVersions     DocumentVersion[]
+  chatSessions         ChatSession[]
+  createdKnowledgeBase KnowledgeBase[]
+  creditLedgerEntries  CreditLedgerEntry[]
+}
+
+model PasswordCredential {
+  id                String    @id @default(cuid())
+  userId            String    @unique
+  passwordHash      String
+  passwordChangedAt DateTime  @default(now())
+  resetTokenHash    String?   @unique
+  resetExpiresAt    DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model AccountInvitation {
+  id              String        @id @default(cuid())
+  email           String
+  normalizedEmail String
+  activeForEmail  String?       @unique
+  role            String        @default("MEMBER")
+  specialty       String        @default("Product Manager")
+  status          String        @default("PENDING")
+  tokenHash       String?       @unique
+  organizationId  String?
+  invitedById     String?
+  acceptedById    String?       @unique
+  expiresAt       DateTime
+  acceptedAt      DateTime?
+  revokedAt       DateTime?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  organization    Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  invitedBy       User?         @relation("InvitationSender", fields: [invitedById], references: [id], onDelete: SetNull)
+  acceptedBy      User?         @relation("InvitationRecipient", fields: [acceptedById], references: [id], onDelete: SetNull)
+
+  @@index([normalizedEmail, status])
+  @@index([status, expiresAt])
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  actorId    String?
+  actorEmail String?
+  action     String
+  targetType String
+  targetId   String?
+  summary    String
+  metadata   String   @default("{}")
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+  actor      User?    @relation("AuditActor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([action, createdAt])
+  @@index([actorId, createdAt])
+  @@index([targetType, targetId])
+}
+
+model Project {
+  id                  String              @id @default(cuid())
+  name                String
+  shortName           String
+  description         String              @default("")
+  status              String              @default("CREATED")
+  access              String              @default("SELF")
+  storyPoint          Int                 @default(0)
+  completedStoryPoint Int                 @default(0)
+  progress            Int                 @default(0)
+  dueDate             DateTime?
+  organizationId      String
+  creatorUserId       String
+  ownerUserId         String?
+  templateProjectId   String?
+  meta                String              @default("{}")
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+  organization        Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  creator             User                @relation("ProjectCreator", fields: [creatorUserId], references: [id], onDelete: Cascade)
+  owner               User?               @relation("ProjectOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
+  workPlans           WorkPlan[]
+  issues              Issue[]
+  documents           Document[]
+  syncEvents          DocumentSyncEvent[]
+
+  @@index([organizationId, status])
+}
+
+model WorkPlan {
+  id                  String    @id @default(cuid())
+  name                String
+  description         String    @default("")
+  type                String    @default("BACKLOG")
+  status              String    @default("CREATED")
+  storyPoint          Int       @default(0)
+  completedStoryPoint Int       @default(0)
+  progress            Int       @default(0)
+  plannedStartDate    DateTime?
+  plannedEndDate      DateTime?
+  actualStartDate     DateTime?
+  actualEndDate       DateTime?
+  projectId           String
+  parentWorkPlanId    String?
+  ownerUserId         String?
+  meta                String    @default("{}")
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  project             Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  issues              Issue[]
+
+  @@index([projectId, type])
+}
+
+model Issue {
+  id                  String     @id @default(cuid())
+  name                String
+  shortName           String
+  description         String     @default("")
+  type                String     @default("STORY")
+  status              String     @default("CREATED")
+  priority            String     @default("MEDIUM")
+  storyPoint          Int        @default(0)
+  completedStoryPoint Int        @default(0)
+  progress            Int        @default(0)
+  plannedStartDate    DateTime?
+  plannedEndDate      DateTime?
+  projectId           String
+  workPlanId          String?
+  parentIssueId       String?
+  creatorUserId       String
+  ownerUserId         String?
+  meta                String     @default("{}")
+  createdAt           DateTime   @default(now())
+  updatedAt           DateTime   @updatedAt
+  project             Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  workPlan            WorkPlan?  @relation(fields: [workPlanId], references: [id], onDelete: SetNull)
+  creator             User       @relation("IssueCreator", fields: [creatorUserId], references: [id], onDelete: Cascade)
+  owner               User?      @relation("IssueOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
+  documents           Document[]
+
+  @@index([projectId, type, status])
+}
+
+model Document {
+  id                 String              @id @default(cuid())
+  name               String
+  description        String              @default("")
+  type               String              @default("PRD")
+  status             String              @default("CREATED")
+  access             String              @default("SELF")
+  content            String              @default("")
+  currentVersion     Int                 @default(1)
+  url                String              @default("")
+  projectId          String?
+  issueId            String?
+  organizationId     String
+  creatorUserId      String
+  templateDocumentId String?
+  meta               String              @default("{}")
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  project            Project?            @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  issue              Issue?              @relation(fields: [issueId], references: [id], onDelete: SetNull)
+  organization       Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  creator            User                @relation("DocumentCreator", fields: [creatorUserId], references: [id], onDelete: Cascade)
+  versions           DocumentVersion[]
+  outgoingSyncs      DocumentSyncEvent[] @relation("SyncSource")
+  incomingSyncs      DocumentSyncEvent[] @relation("SyncTarget")
+
+  @@index([projectId, type])
+  @@index([organizationId, type])
+}
+
+model DocumentVersion {
+  id            String   @id @default(cuid())
+  documentId    String
+  versionNumber Int
+  label         String
+  content       String
+  metaSnapshot  String   @default("{}")
+  createdById   String?
+  createdAt     DateTime @default(now())
+  document      Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  createdBy     User?    @relation(fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([documentId, versionNumber])
+}
+
+model DocumentSyncEvent {
+  id               String    @id @default(cuid())
+  projectId        String
+  sourceDocumentId String
+  targetDocumentId String
+  sourceVersion    Int
+  summary          String
+  status           String    @default("PENDING")
+  createdAt        DateTime  @default(now())
+  appliedAt        DateTime?
+  project          Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  sourceDocument   Document  @relation("SyncSource", fields: [sourceDocumentId], references: [id], onDelete: Cascade)
+  targetDocument   Document  @relation("SyncTarget", fields: [targetDocumentId], references: [id], onDelete: Cascade)
+
+  @@index([targetDocumentId, status])
+}
+
+model ChatSession {
+  id               String        @id @default(cuid())
+  name             String
+  targetEntityType String        @default("DOCUMENT")
+  targetEntityId   String        @default("")
+  access           String        @default("SELF")
+  status           String        @default("ACTIVE")
+  organizationId   String
+  userId           String
+  meta             String        @default("{}")
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+  organization     Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user             User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages         ChatMessage[]
+
+  @@index([targetEntityType, targetEntityId])
+  @@index([organizationId, targetEntityType])
+}
+
+model ChatMessage {
+  id            String      @id @default(cuid())
+  chatSessionId String
+  role          String
+  content       String
+  meta          String      @default("{}")
+  createdAt     DateTime    @default(now())
+  chatSession   ChatSession @relation(fields: [chatSessionId], references: [id], onDelete: Cascade)
+
+  @@index([chatSessionId, createdAt])
+}
+
+model KnowledgeBase {
+  id             String              @id @default(cuid())
+  name           String
+  description    String              @default("")
+  status         String              @default("ACTIVE")
+  organizationId String
+  creatorUserId  String
+  meta           String              @default("{}")
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+  organization   Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  creator        User                @relation(fields: [creatorUserId], references: [id], onDelete: Cascade)
+  files          KnowledgeBaseFile[]
+
+  @@index([organizationId, status])
+}
+
+model KnowledgeBaseFile {
+  id              String        @id @default(cuid())
+  knowledgeBaseId String
+  fileName        String
+  fileSize        Int           @default(0)
+  mimeType        String        @default("text/plain")
+  status          String        @default("INDEXED")
+  chunkCount      Int           @default(1)
+  content         String        @default("")
+  chunksJson      String        @default("[]")
+  uploadedById    String?
+  createdAt       DateTime      @default(now())
+  knowledgeBase   KnowledgeBase @relation(fields: [knowledgeBaseId], references: [id], onDelete: Cascade)
+
+  @@index([knowledgeBaseId])
+}
+
+model TemplateDocument {
+  id                 String        @id @default(cuid())
+  name               String
+  description        String        @default("")
+  category           String        @default("DOCUMENT")
+  type               String        @default("PRD")
+  access             String        @default("PUBLIC")
+  promptInstructions String        @default("")
+  sampleOutput       String        @default("")
+  previewMeta        String        @default("{}")
+  organizationId     String?
+  creatorUserId      String?
+  isSystem           Boolean       @default(false)
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+  organization       Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([category, type])
+}
+
+model CreditLedgerEntry {
+  id             String       @id @default(cuid())
+  organizationId String
+  userId         String?
+  amount         Int
+  type           String
+  action         String
+  balanceAfter   Int
+  meta           String       @default("{}")
+  createdAt      DateTime     @default(now())
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user           User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, createdAt])
+}
+
+model IntegrationConnection {
+  id             String       @id @default(cuid())
+  organizationId String
+  provider       String
+  status         String       @default("DISCONNECTED")
+  configJson     String       @default("{}")
+  connectedById  String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, provider])
+}

@@ -1,0 +1,39 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: omniflow-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: omniflow
+      POSTGRES_PASSWORD: omniflow_prod_password
+      POSTGRES_DB: omniflow
+    ports:
+      - "5432:5432"
+    volumes:
+      - omniflow_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U omniflow -d omniflow"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  omniflow-web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: omniflow-web
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      DATABASE_PROVIDER: postgresql
+      DATABASE_URL: postgresql://omniflow:omniflow_prod_password@postgres:5432/omniflow?schema=public
+      NEXTAUTH_URL: http://localhost:3000
+      NEXTAUTH_SECRET: replace-with-strong-32-byte-secret-in-production
+    ports:
+      - "3000:3000"
+
+volumes:
+  omniflow_pgdata:
